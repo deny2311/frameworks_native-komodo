@@ -27,6 +27,7 @@
 #include <compositionengine/FodExtension.h>
 #include <gui/BufferQueueConsumer.h>
 #include <system/window.h>
+#include <cutils/properties.h>
 
 #include "LayerRejecter.h"
 #include "SurfaceInterceptor.h"
@@ -34,6 +35,14 @@
 #include "FrameTracer/FrameTracer.h"
 #include "Scheduler/LayerHistory.h"
 #include "TimeStats/TimeStats.h"
+
+static bool sCheckedProps = false;
+static bool sSamsungFod = false;
+static void init_fod_props() {
+    if(sCheckedProps) return;
+    sCheckedProps = true;
+    sSamsungFod = property_get_bool("persist.sys.phh.fod.samsung", false);
+}
 
 namespace android {
 
@@ -492,6 +501,7 @@ void BufferQueueLayer::onFirstRef() {
     mConsumer =
             mFlinger->getFactory().createBufferLayerConsumer(consumer, mFlinger->getRenderEngine(),
                                                              mTextureName, this);
+    init_fod_props();
     mConsumer->setConsumerUsageBits(getEffectiveUsage(0));
 
     mContentsChangedListener = new ContentsChangedListener(this);
@@ -525,6 +535,15 @@ status_t BufferQueueLayer::setDefaultBufferProperties(uint32_t w, uint32_t h, Pi
 
     setDefaultBufferSize(w, h);
     mConsumer->setDefaultBufferFormat(format);
+    init_fod_props();
+
+    setDefaultBufferSize(w, h);
+    mConsumer->setDefaultBufferFormat(format);
+    uint64_t usageBits = getEffectiveUsage(0);
+    if(sSamsungFod && strstr(mName.c_str(), "Fingerprint on display.touched") != nullptr) {
+        ALOGE("Found on touched layer!");
+        usageBits |= 0x400000000LL;
+    }
     mConsumer->setConsumerUsageBits(usageBits);
 
     return NO_ERROR;
